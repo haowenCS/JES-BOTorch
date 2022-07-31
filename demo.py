@@ -5,5 +5,7 @@ from jes.bo import bayesian_optimization
 from botorch.test_functions import Branin
 
 test_objective = Branin(negate=True)
+def obj(X):  
+    return test_objective(torch.Tensor([X, 3.1415]).reshape(1, -1))
 
-best_X, best_y = bayesian_optimization(test_objective, 50, test_objective.dim, test_objective.bounds)
+best_X, best_y = bayesian_optimization(obj, 50, 1, torch.tensor([0, 15]).unsqueeze(1))

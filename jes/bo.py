@@ -11,13 +11,12 @@ from botorch.acquisition import ExpectedImprovement
 from botorch.optim.fit import fit_gpytorch_torch
 from gpytorch.mlls import ExactMarginalLogLikelihood
 from botorch.utils.transforms import normalize, standardize, unnormalize
-
-from jes.utils import NUM_RESTARTS, RAW_SAMPLES, report_iteration
-
+from jes.sampler import RFFSampler, SimpleRFFSampler
+from jes.utils import NUM_RESTARTS, RAW_SAMPLES, report_iteration, plot_points
 
 def bayesian_optimization(objective, iterations, dim, bounds, n_optima=100):
     doe = SobolEngine(dim)
-    init_samples = dim + 1
+    init_samples = dim + 2
     train_X = unnormalize(doe.draw(init_samples), bounds).double()
     train_y = torch.zeros(init_samples).double()
 
@@ -33,8 +32,12 @@ def bayesian_optimization(objective, iterations, dim, bounds, n_optima=100):
         mll = ExactMarginalLogLikelihood(gp.likelihood, gp)
         fit_gpytorch_model(mll, optimizer=fit_gpytorch_torch, options={'disp': False})
         best_f = norm_y.max()
-        sampler = otp
-        optimal_samples = sampler.sample(n_optima, candidate_set=None)
+
+        sampler = RFFSampler(gp)
+        candidate_set = torch.linspace(0, 1, 169).unsqueeze(-1).to(train_X)
+        optimal_X, optimal_y, samples = sampler.sample(2, candidate_set=candidate_set)
+        
+        plot_points(optimal_X, optimal_y, gp, samples)
         acq_function = ExpectedImprovement(model=gp, best_f=best_f)
         norm_point, _ = optimize_acqf(
             acq_function=acq_function,
