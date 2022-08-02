@@ -20,24 +20,24 @@ from jes.utils import batchify_state_dict, compute_truncated_variance
 CLAMP_LB = 1.0e-8
 MIN_VAR = 1e-6
 
+
 class JointEntropySearch(AcquisitionFunction):
 
     def __init__(self,
                  model: Model,
                  num_opt_samples: int = 100,
-                 greedy_fraction: float = 0.1, 
-                 sampler_type: str = 'rff',
+                 sampler_type: str = 'exact',
                  sampler_kwargs: dict = {}
                  ) -> None:
 
         super(JointEntropySearch, self).__init__(model=model)
         self.num_opt_samples = num_opt_samples
-        
-        if sampler_type == 'rff':
+
+        if sampler_type == 'exact':
+            self.sampler = ExactSampler(self.model)
+        elif sampler_type == 'rff':
             self.sampler = RFFSampler(
                 self.model, num_features=1024, **sampler_kwargs)
-        elif sampler_type == 'exact':
-            self.sampler = ExactSampler(self.model)
         else:
             raise NotImplementedError(
                 f'The OptSampler type {sampler_type} is not available.')
@@ -59,12 +59,10 @@ class JointEntropySearch(AcquisitionFunction):
             raise NotImplementedError(
                 f'JES is not implemented for model type {type(self.model)}')
         batch_model.load_state_dict(batchify_state_dict(
-                self.model, self.num_opt_samples))
-        
+            self.model, self.num_opt_samples))
+
         # Predict something because we must before we can condition
         batch_model.posterior(self.model.train_inputs[0])
-        print('batch_model.train_inputs[0].shape', batch_model.train_inputs[0].shape)
-        print('self.X_opt.unsqueeze(-1)', self.X_opt.unsqueeze(1).shape)
         self.conditioned_batch_model = batch_model.condition_on_observations(
             self.X_opt.unsqueeze(1), self.f_opt.unsqueeze(1), noise=torch.ones_like(self.f_opt.unsqueeze(-1)) * 1e-6)
 
@@ -75,14 +73,14 @@ class JointEntropySearch(AcquisitionFunction):
         Returns:
             Tensor: The JES acquisition function values at the points X.
         """
+        # everything needs squeezing because we always add extra dimensions inside due to the batching 
         base_entropy = self.compute_base_entropy(X.squeeze(1))
         conditional_entropy = self.compute_conditional_entropy(X.squeeze(1))
         res = (base_entropy - conditional_entropy.mean(axis=0)).squeeze(1)
-        #print('X.shape', X.shape)
-        #print('res.shape', res.shape)
+
         return res
 
-    def compute_base_entropy(self, X : Tensor) -> Tensor:
+    def compute_base_entropy(self, X: Tensor) -> Tensor:
         """Computes the entropy of the normal distribution at point(s) X, noise included
         Args:
             X (Tensor): The array of points to compute the entropy of a normal distribution on
@@ -100,10 +98,11 @@ class JointEntropySearch(AcquisitionFunction):
             X (Tensor): The array of points to compute the moment matched truncated Gaussian entropy
         Returns:
             Tensor: The entropy at the points X
-        """    
+        """
         # This argument is default, but just to clarify that noise is usually
         # not included in the posterior...
-        posterior = self.conditioned_batch_model.posterior(X, observation_noise=False)
+        posterior = self.conditioned_batch_model.posterior(
+            X, observation_noise=False)
         conditional_batch_mean = posterior.mean
         conditional_batch_variance = posterior.variance
 
@@ -111,7 +110,8 @@ class JointEntropySearch(AcquisitionFunction):
         truncated_variances = self.compute_truncated_variance(
             conditional_batch_mean, conditional_batch_variance, reshaped_f_opt)
         reduced_entropy = 0.5 * \
-            torch.log(2 * math.pi * (self.noise_var + truncated_variances)) + 0.5
+            torch.log(2 * math.pi * (self.noise_var +
+                      truncated_variances)) + 0.5
 
         return reduced_entropy
 
@@ -145,3 +145,30 @@ class JointEntropySearch(AcquisitionFunction):
 
 
 # TODO make eps-greedy JES by subclassing it and change forward
+class GreedyJointEntropySearch(JointEntropySearch):
+
+    def __init__(self,
+                 model: Model,
+                 greedy_fraction: float = 0.1,
+                 num_opt_samples: int = 100,
+                 sampler_type: str = 'exact',
+                 sampler_kwargs: dict = {}
+                 ) -> None:
+        super(GreedyJointEntropySearch, self).__init__(
+            model,
+            num_opt_samples,
+            sampler_type,
+            sampler_kwargs
+            )
+        if np.random.uniform() < greedy_fraction:
+            self.greedy = True
+            
+        else:
+            self.greedy = False
+            
+    def forward(self, X):
+        if self.greedy:
+            return self.model(X).mean.squeeze(-1)
+
+        else:
+            return super(GreedyJointEntropySearch, self).forward(X)

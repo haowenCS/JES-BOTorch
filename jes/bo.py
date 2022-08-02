@@ -13,7 +13,7 @@ from botorch.optim.fit import fit_gpytorch_torch
 from gpytorch.mlls import ExactMarginalLogLikelihood
 from botorch.utils.transforms import normalize, standardize, unnormalize
 from jes.sampler import RFFSampler, ExactSampler
-from jes.jes import JointEntropySearch
+from jes.jes import JointEntropySearch, GreedyJointEntropySearch
 from jes.utils import NUM_RESTARTS, RAW_SAMPLES, report_iteration, plot_points
 
 def bayesian_optimization(objective, iterations, dim, bounds, n_optima=100):
@@ -33,8 +33,12 @@ def bayesian_optimization(objective, iterations, dim, bounds, n_optima=100):
         gp = SingleTaskGP(norm_X, norm_y)
         mll = ExactMarginalLogLikelihood(gp.likelihood, gp)
         fit_gpytorch_model(mll, optimizer=fit_gpytorch_torch, options={'disp': False})
-        acq_function = JointEntropySearch(model=gp, sampler_type='exact')
-
+        
+        if i == iterations - 1: 
+            # the last iteration, we always want the best guess that the model has to offer
+            acq_function = GreedyJointEntropySearch(model=gp, sampler_type='exact', greedy_fraction=1)
+        else:
+            acq_function = GreedyJointEntropySearch(model=gp, sampler_type='exact')
         norm_point, _ = optimize_acqf(
             acq_function=acq_function,
             bounds=torch.Tensor([[0, 1] for d in range(dim)]).T,
@@ -50,4 +54,7 @@ def bayesian_optimization(objective, iterations, dim, bounds, n_optima=100):
         train_y = torch.cat([train_y, new_eval])
 
         report_iteration(i, train_X, train_y)
-    return train_y.max()
+    
+    best_arg = train_y.argmax()
+    best_guess = train_y[-1, :]
+    return train_X[best_arg, :], train_y[best_arg, :], best_guess
