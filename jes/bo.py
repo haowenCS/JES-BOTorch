@@ -53,16 +53,16 @@ def bayesian_optimization(objective, iterations, dim, bounds, n_optima=100):
         #    ax.fill_between(d(candidate_set), d(mean[i]) - 2 * d(torch.sqrt(variance[i])), d(mean[i]) + 2 * d(torch.sqrt(variance[i])), alpha=0.2, color='blue')
         #    ax.scatter(d(acq_function.X_opt[i]), d(acq_function.f_opt[i]), s=50)
         #plt.show()
-        print(acq_function)
+        
         norm_point, _ = optimize_acqf(
             acq_function=acq_function,
             bounds=torch.Tensor([[0, 1] for d in range(dim)]).T,
             q=1,
             num_restarts=NUM_RESTARTS,
             raw_samples=RAW_SAMPLES,
-            options={},
+            options={'nonnegative': True, 'sample_around_best': True},
         )
-        print('norm_point', norm_point)
+        
         new_point = unnormalize(norm_point, bounds)
         new_eval = torch.Tensor([objective(new_point)]).reshape(1, 1)
         train_X = torch.cat([train_X, new_point])

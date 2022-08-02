@@ -24,7 +24,7 @@ class JointEntropySearch(AcquisitionFunction):
 
     def __init__(self,
                  model: Model,
-                 num_opt_samples: int = 10,
+                 num_opt_samples: int = 100,
                  sampler_type: str = 'rff',
                  sampler_kwargs: dict = {}
                  ) -> None:
@@ -70,8 +70,11 @@ class JointEntropySearch(AcquisitionFunction):
             Tensor: The JES acquisition function values at the points X.
         """
         base_entropy = self.compute_base_entropy(X.squeeze(1))
-        conditional_entropy = self.compute_moment_matched_entropy(X.squeeze(1))
+        conditional_entropy = self.compute_conditional_entropy(X.squeeze(1))
         res = (base_entropy - conditional_entropy.mean(axis=0)).squeeze(1)
+        #print('X.shape', X.shape)
+        #print('res.shape', res.shape)
+        return res
 
     def compute_base_entropy(self, X : Tensor) -> Tensor:
         """Computes the entropy of the normal distribution at point(s) X, noise included
@@ -85,7 +88,7 @@ class JointEntropySearch(AcquisitionFunction):
         entropy = 0.5 * torch.log(2 * math.pi * variance) + 0.5
         return entropy
 
-    def compute_moment_matched_entropy(self, X: Tensor) -> Tensor:
+    def compute_conditional_entropy(self, X: Tensor) -> Tensor:
         """Computes the entropy of the normal distribution at point(s) X, noise included
         Args:
             X (Tensor): The array of points to compute the moment matched truncated Gaussian entropy
@@ -97,10 +100,10 @@ class JointEntropySearch(AcquisitionFunction):
         posterior = self.conditioned_batch_model.posterior(X, observation_noise=False)
         conditional_batch_mean = posterior.mean
         conditional_batch_variance = posterior.variance
-        # re-ordering the dimensions a bit to assure that the computations are done correctly
-        
+
+        reshaped_f_opt = self.f_opt.repeat(1, X.shape[0]).unsqueeze(-1)
         truncated_variances = self.compute_truncated_variance(
-            conditional_batch_mean, conditional_batch_variance, self.f_opt.repeat(1, X.shape[0]))
+            conditional_batch_mean, conditional_batch_variance, reshaped_f_opt)
         reduced_entropy = 0.5 * \
             torch.log(2 * math.pi * (self.noise_var + truncated_variances)) + 0.5
 
@@ -119,7 +122,7 @@ class JointEntropySearch(AcquisitionFunction):
             Tensor: The variance after truncation.
         """
         norm_dist = dist.Normal(0, 1)
-        beta = (upper_truncation.unsqueeze(1) - mean) / torch.sqrt(variance)
+        beta = (upper_truncation - mean) / torch.sqrt(variance)
 
         # Truncate the maximum and minimum amount of truncation (determined by the Z-value of the inputs)
         beta = beta.clamp_min(math.log10(CLAMP_LB)).clamp_max(
