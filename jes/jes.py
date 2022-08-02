@@ -14,7 +14,7 @@ from botorch.models.model import Model
 from botorch.models import SingleTaskGP, FixedNoiseGP
 from botorch.models.utils import check_no_nans
 from botorch.sampling.samplers import SobolQMCNormalSampler
-from jes.sampler import OptSampler, RFFSampler
+from jes.sampler import OptSampler, RFFSampler, ExactSampler
 from jes.utils import batchify_state_dict, compute_truncated_variance
 
 CLAMP_LB = 1.0e-8
@@ -25,15 +25,19 @@ class JointEntropySearch(AcquisitionFunction):
     def __init__(self,
                  model: Model,
                  num_opt_samples: int = 100,
+                 greedy_fraction: float = 0.1, 
                  sampler_type: str = 'rff',
                  sampler_kwargs: dict = {}
                  ) -> None:
+
         super(JointEntropySearch, self).__init__(model=model)
         self.num_opt_samples = num_opt_samples
         
         if sampler_type == 'rff':
             self.sampler = RFFSampler(
                 self.model, num_features=1024, **sampler_kwargs)
+        elif sampler_type == 'exact':
+            self.sampler = ExactSampler(self.model)
         else:
             raise NotImplementedError(
                 f'The OptSampler type {sampler_type} is not available.')
@@ -136,3 +140,6 @@ class JointEntropySearch(AcquisitionFunction):
             density_beta / Z + torch.pow(density_beta / Z, 2)
         trunc_variance = variance * (1 - relative_variance_reduction)
         return trunc_variance
+
+
+# TODO make eps-greedy JES by subclassing it and change forward

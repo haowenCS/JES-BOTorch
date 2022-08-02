@@ -114,11 +114,58 @@ class RFFSampler(OptSampler):
                 'Gradient-based optimization of the RFF samples is not yet implemented.')
         else:
             X_max = candidate_set[argmax, :]
+        f_max = f_max.unsqueeze(-1)
 
+        print('X_max.shape', X_max.shape, 'f_max.shape', f_max.shape)
         if return_samples:
-            return X_max, f_max.unsqueeze(-1), samples
-        return X_max, f_max.unsqueeze(-1)
+            return X_max, f_max, samples
+        return X_max, f_max
 
 
-class PosteriorSampler(OptSampler):
-    pass
+class ExactSampler(OptSampler):
+
+    def __init__(self, model):
+        self.model = model
+        self.train_X = model.train_inputs[0]
+        self.train_Y = model.train_targets
+        
+    def sample(self,
+               num_samples: int,
+               candidate_set: Union[Tensor, None] = None,
+               num_candidate_points: int = 4096,
+               num_append_points: int = 0,
+               return_samples: bool = False) -> Tuple[Tensor, Tensor]:
+        """Draws a number of optimal locations an their corresponding optimal values from a candidate set of points.
+
+        Args:
+            num_samples (int): The number of optimal samples (x, f) to draw from the sampler.
+            candidate_set (Tensor, optional): A candidate set of points to query to find the optima. Defaults to None.
+            num_candidate_points (int, optional): [description]. The number of Sobol-generated points'
+                'to to query to find the optima if there is no candidate_set. Defaults to 4096.
+            num_append_points (Tensor, optional): [description].  Number of points near recent queries to append to the candidate_set. Defaults to None.
+        
+        Returns:
+            [Tuple[Tensor, Tensor]]: Tuple of Tensors containing (optimal locations, optimal values).
+        """
+        if candidate_set is None:
+            sobol = SobolEngine(self.train_X.shape[1])
+            candidate_set = sobol.draw(num_candidate_points).to(self.train_X)
+
+        if num_append_points > 0:
+            # TODO create the append set
+            append_set = None
+            candidate_set = torch.cat(
+                (candidate_set, append_set)).to(self.train_X)
+
+        posterior = self.model.posterior(candidate_set)
+        samples = posterior.rsample(sample_shape=torch.Size([num_samples])).squeeze(-1)
+        f_max, argmax = samples.max(dim=1)
+        X_max = candidate_set[argmax, :]
+        f_max = f_max.unsqueeze(-1)
+        
+        if return_samples:
+            return X_max, f_max, samples.squeeze(0)
+        return X_max, f_max
+
+
+
