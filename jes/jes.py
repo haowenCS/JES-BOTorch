@@ -63,8 +63,10 @@ class JointEntropySearch(AcquisitionFunction):
         
         # Predict something because we must before we can condition
         batch_model.posterior(self.model.train_inputs[0])
+        print('batch_model.train_inputs[0].shape', batch_model.train_inputs[0].shape)
+        print('self.X_opt.unsqueeze(-1)', self.X_opt.unsqueeze(1).shape)
         self.conditioned_batch_model = batch_model.condition_on_observations(
-            self.X_opt.unsqueeze(-1), self.f_opt.unsqueeze(-1), noise=torch.ones_like(self.f_opt.unsqueeze(-1)) * 1e-6)
+            self.X_opt.unsqueeze(1), self.f_opt.unsqueeze(1), noise=torch.ones_like(self.f_opt.unsqueeze(-1)) * 1e-6)
 
     def forward(self, X) -> Tensor:
         """Computes the Joint Entropy Search acquisition function

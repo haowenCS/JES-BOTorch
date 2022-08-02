@@ -33,47 +33,8 @@ def bayesian_optimization(objective, iterations, dim, bounds, n_optima=100):
         gp = SingleTaskGP(norm_X, norm_y)
         mll = ExactMarginalLogLikelihood(gp.likelihood, gp)
         fit_gpytorch_model(mll, optimizer=fit_gpytorch_torch, options={'disp': False})
-        
-        candidate_set = torch.linspace(0, 1, 169*5).unsqueeze(-1).to(train_X)
-        sampler = ExactSampler(
-        gp)
-        X_opt, f_opt, samples = sampler.sample(10, candidate_set=candidate_set, return_samples=True)
-        
         acq_function = JointEntropySearch(model=gp, sampler_type='exact')
-        acq_value = acq_function(candidate_set)
-        #batch_model = acq_function.conditioned_batch_model
-        #posterior = batch_model.posterior(candidate_set, observation_noise=False)
-        #mean = posterior.mean
-        #variance = posterior.variance
-        #print(mean.shape)
 
-        #fig, axes = plt.subplots(2, 5, figsize=(36, 16))
-        posterior = gp.posterior(candidate_set, observation_noise=False)
-        mean = posterior.mean
-        variance = posterior.variance
-        fig, ax = plt.subplots(3, 1, figsize=(36, 16), sharex=True)
-        def d(X):
-            return X.detach().numpy().flatten()
-        
-        ax[1].plot(d(candidate_set), d(mean), color='blue')
-        ax[1].scatter(d(norm_X), d(norm_y), s=50, color='red')
-        ax[1].fill_between(d(candidate_set), d(mean) - 2 * d(torch.sqrt(variance)), d(mean) + 2 * d(torch.sqrt(variance)), alpha=0.2, color='blue')
-        ax[1].scatter(d(acq_function.X_opt), d(acq_function.f_opt), s=80, color='darkgoldenrod')
-        
-        ax[0].plot(d(candidate_set), d(mean), color='k')
-        ax[0].scatter(d(norm_X), d(norm_y), s=50, color='red')
-        ax[0].fill_between(d(candidate_set), d(mean) - 2 * d(torch.sqrt(variance)), d(mean) + 2 * d(torch.sqrt(variance)), alpha=0.2, color='k')
-        ax[0].plot(d(candidate_set), samples.T.detach().numpy())
-        
-        ax[2].plot(d(candidate_set), d(acq_value))
-        plt.show()
-        #for i in range(10):
-        #    ax = axes[int(i/5), i % 5]
-        #    ax.plot(d(candidate_set), d(mean[i]), color='blue')
-        #    ax.fill_between(d(candidate_set), d(mean[i]) - 2 * d(torch.sqrt(variance[i])), d(mean[i]) + 2 * d(torch.sqrt(variance[i])), alpha=0.2, color='blue')
-        #    ax.scatter(d(acq_function.X_opt[i]), d(acq_function.f_opt[i]), s=50)
-        #plt.show()
-        
         norm_point, _ = optimize_acqf(
             acq_function=acq_function,
             bounds=torch.Tensor([[0, 1] for d in range(dim)]).T,

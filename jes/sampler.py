@@ -91,7 +91,7 @@ class RFFSampler(OptSampler):
             [Tuple[Tensor, Tensor]]: Tuple of Tensors containing (optimal locations, optimal values).
         """
         if candidate_set is None:
-            sobol = SobolEngine(self.train_X.shape[1])
+            sobol = SobolEngine(dimension=self.train_X.shape[1])
             candidate_set = sobol.draw(num_candidate_points).to(self.train_X)
 
         if num_append_points > 0:
@@ -148,7 +148,7 @@ class ExactSampler(OptSampler):
             [Tuple[Tensor, Tensor]]: Tuple of Tensors containing (optimal locations, optimal values).
         """
         if candidate_set is None:
-            sobol = SobolEngine(self.train_X.shape[1])
+            sobol = SobolEngine(dimension=self.train_X.shape[1])
             candidate_set = sobol.draw(num_candidate_points).to(self.train_X)
 
         if num_append_points > 0:
