@@ -10,6 +10,7 @@ from torch import Tensor
 import torch.distributions as dist
 
 from botorch.acquisition.acquisition import AcquisitionFunction
+from botorch.acquisition.analytic import PosteriorMean
 from botorch.models.model import Model
 from botorch.models import SingleTaskGP, FixedNoiseGP
 from botorch.models.utils import check_no_nans
@@ -143,6 +144,9 @@ class JointEntropySearch(AcquisitionFunction):
         trunc_variance = variance * (1 - relative_variance_reduction)
         return trunc_variance
 
+    def get_sampled_optima(self):
+        return self.X_opt, self.f_opt
+
 
 # TODO make eps-greedy JES by subclassing it and change forward
 class GreedyJointEntropySearch(JointEntropySearch):
@@ -162,13 +166,14 @@ class GreedyJointEntropySearch(JointEntropySearch):
             )
         if np.random.uniform() < greedy_fraction:
             self.greedy = True
+            self.pm = PosteriorMean(model)
             
         else:
             self.greedy = False
             
     def forward(self, X):
         if self.greedy:
-            return self.model(X).mean.squeeze(-1)
+            return self.pm.forward(X)
 
         else:
             return super(GreedyJointEntropySearch, self).forward(X)

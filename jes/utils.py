@@ -5,8 +5,8 @@ from torch import Tensor
 from botorch.models import SingleTaskGP, FixedNoiseGP
 
 
-RAW_SAMPLES = 2048
-NUM_RESTARTS = 20
+RAW_SAMPLES = 1024
+NUM_RESTARTS = 10
 NUM_FEATURES = 1024
 
 
