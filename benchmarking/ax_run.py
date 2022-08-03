@@ -19,10 +19,9 @@ from jes.jes import GreedyJointEntropySearch
 from jes.constructor import construct_inputs_JES
 
 TEST_FUNCTIONS = {
-    'branin': Branin(noise_std=1, negate=True),
-    'ackley': Ackley(dim=4, noise_std=1, negate=True),
-    'hartmann3': Hartmann(dim=3, noise_std=1, negate=True),
-    'hartmann6':  Hartmann(dim=6, noise_std=1, negate=True)
+    'branin': Branin(noise_std=0.5, negate=True),
+    'hartmann3': Hartmann(dim=3, noise_std=0.5, negate=True),
+    'hartmann6':  Hartmann(dim=6, noise_std=0.5, negate=True)
 }
 
 ACQUISITION_FUNCTIONS = {
