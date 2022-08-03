@@ -15,6 +15,7 @@ from botorch.models.model import Model
 from botorch.models import SingleTaskGP, FixedNoiseGP
 from botorch.models.utils import check_no_nans
 from botorch.sampling.samplers import SobolQMCNormalSampler
+from botorch.utils import t_batch_mode_transform
 from jes.sampler import OptSampler, RFFSampler, ExactSampler
 from jes.utils import batchify_state_dict, compute_truncated_variance
 
@@ -67,6 +68,7 @@ class JointEntropySearch(AcquisitionFunction):
         self.conditioned_batch_model = batch_model.condition_on_observations(
             self.X_opt.unsqueeze(1), self.f_opt.unsqueeze(1), noise=torch.ones_like(self.f_opt.unsqueeze(-1)) * 1e-6)
 
+    @t_batch_mode_transform()
     def forward(self, X) -> Tensor:
         """Computes the Joint Entropy Search acquisition function
         Args:
@@ -171,6 +173,7 @@ class GreedyJointEntropySearch(JointEntropySearch):
         else:
             self.greedy = False
             
+    @t_batch_mode_transform()     
     def forward(self, X):
         if self.greedy:
             return self.pm.forward(X)

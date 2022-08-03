@@ -50,13 +50,13 @@ def bayesian_optimization(objective, iterations, dim, bounds, n_optima=100):
             options={'nonnegative': True, 'sample_around_best': True},
         )
         guesses = torch.cat([guesses, unnormalize(guess, bounds)])
-        
+        print('Guess', unnormalize(guess, bounds))
         start = time()
         if i == iterations - 1: 
             # the last iteration, we always want the best guess that the model has to offer
             acq_function = GreedyJointEntropySearch(model=gp, sampler_type='exact', greedy_fraction=1)
         else:
-            acq_function = GreedyJointEntropySearch(model=gp, sampler_type='exact', num_opt_samples=100)
+            acq_function = GreedyJointEntropySearch(model=gp, sampler_type='exact', num_opt_samples=250)
         
         setup_time = time() - start
         
