@@ -64,7 +64,7 @@ gs = GenerationStrategy(
 ax_client = AxClient(generation_strategy=gs)
 # Setup the experiment
 ax_client.create_experiment(
-    name=f"{experiment}_{acqfunc_name}_{seed}.csv",
+    name=f"{experiment}_{acqfunc_name}_run{seed}",
     parameters=[
         {
             "name": f"x_{i+1}",
@@ -82,20 +82,18 @@ ax_client.create_experiment(
 
 
 def evaluate(parameters):
-    x = torch.tensor([[parameters.get(f"X{i+1}") for i in range(test_function.dim)]])
+    x = torch.tensor([[parameters.get(f"x_{i+1}") for i in range(test_function.dim)]])
     bc_eval = test_function(x).squeeze().tolist()
     # In our case, standard error is 0, since we are computing a synthetic function.
     return {experiment: bc_eval}
 
-for i in range(3 * test_function.dim):
+for i in range(50 * test_function.dim):
     parameters, trial_index = ax_client.get_next_trial()
     # Local evaluation here can be replaced with deployment to external system.
     ax_client.complete_trial(trial_index=trial_index, raw_data=evaluate(parameters))
 
 results_df = ax_client.get_trials_data_frame()
-results_df.to_csv('before.csv')
-configs = -torch.tensor(results_df.loc[:, ['X' in col for col in results_df.columns]].to_numpy())
-
+configs = torch.tensor(results_df.loc[:, ['x_' in col for col in results_df.columns]].to_numpy())
 results_df['True Eval'] = test_function.evaluate_true(configs)
 
-results_df.to_csv('after.csv')
+results_df.to_csv(f"{ax_client.experiment.name}.csv")
