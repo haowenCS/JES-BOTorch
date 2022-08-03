@@ -75,7 +75,7 @@ ax_client.create_experiment(
         for i in range(test_function.dim)
     ],
     objectives={
-        experiment: ObjectiveProperties(minimize=True),
+        experiment: ObjectiveProperties(minimize=False),
     },
 )
 
