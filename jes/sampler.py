@@ -43,17 +43,17 @@ class RFFSampler(OptSampler):
         sigma = model.covar_module.outputscale
         gp_noise = model.likelihood.raw_noise
         self.scaling = torch.sqrt(2 * sigma / num_features)
-        if (model.covar_module.base_kernel, RBFKernel):
+        if isinstance(model.covar_module.base_kernel, RBFKernel):
             self.weights = Normal(0, 1).sample(torch.Size(
                 [num_features, self.dim])).to(self.train_X) / ls
 
         # Adjust weights if Matern
         elif isinstance(model.covar_module.base_kernel, MaternKernel):
-            weights = Normal(0, 1).sample(torch.Size(
-                [self.num_features, self.dim])).to(self.train_X)
+            self.weights = Normal(0, 1).sample(torch.Size(
+                [num_features, self.dim])).to(self.train_X) / ls
             gamma_weights = Gamma(2.5, 2.5).sample(torch.Size(
-                [self.num_features, self.dim])).to(self.train_X)
-            self.weights = weights * gamma_weights
+                [self.num_features, 1])).to(self.train_X)
+            self.weights = self.weights * torch.rsqrt(gamma_weights)
 
         else:
             raise NotImplementedError(
@@ -98,6 +98,9 @@ class RFFSampler(OptSampler):
         if candidate_set is None:
             sobol = SobolEngine(dimension=self.dim)
             candidate_set = sobol.draw(num_candidate_points).to(self.train_X)
+        else:
+            # assert the input candidate set is of the same type (float/double)
+            candidate_set = candidate_set.to(self.train_X)
 
         if num_append_points > 0:
             # TODO create the append set
@@ -110,6 +113,7 @@ class RFFSampler(OptSampler):
         theta = rho - torch.matmul(self.Z, (torch.matmul(self.U, (self.R *
                                    torch.matmul(self.U.T, (torch.matmul(self.Z.T, rho))))))) + self.mu
         #theta = self.mu + torch.matmul(torch.linalg.cholesky(self.Sigma), rho)
+        
         samples = torch.matmul(
             theta.T * self.scaling, torch.cos(torch.matmul(self.weights, candidate_set.T) + self.b))
         f_max, argmax = samples.max(dim=1)
@@ -159,7 +163,10 @@ class ExactSampler(OptSampler):
         if candidate_set is None:
             sobol = SobolEngine(dimension=self.dim)
             candidate_set = sobol.draw(num_candidate_points).to(self.train_X)
-
+        else:
+            # assert the input candidate set is of the same type (float/double)
+            candidate_set = candidate_set.to(self.train_X)
+        
         if num_append_points > 0:
             num_top_points = math.ceil(len(self.train_X) * top_fraction)
             # create the append set for better guesses around the best observations
@@ -182,3 +189,55 @@ class ExactSampler(OptSampler):
         if return_samples:
             return X_max, f_max, samples.squeeze(0)
         return X_max, f_max
+
+
+class CanonicalSampler(OptSampler):
+    def __init__(self, model, num_features=1024):
+        """A sampler of optimal locations and values based on a Random Fourier feature
+        approximation of the prior distribution, and canonical bases for the posterior update.
+
+        Args:
+            model (botorch.models.Model): A BOTorch GP.
+            num_features (int, optional): The number of features to use for approximating the posterior. Defaults to 1048.
+
+        Raises:
+            NotImplementedError: [description]
+        """
+        self.train_X = model.train_inputs[0]
+        self.train_Y = model.train_targets
+        self.dim = self.train_X.shape[1]
+        self.num_features = num_features
+        ls = model.covar_module.base_kernel.lengthscale
+        sigma = model.covar_module.outputscale
+        gp_noise = model.likelihood.raw_noise
+        self.scaling = torch.sqrt(2 * sigma / num_features)
+        if isinstance(model.covar_module.base_kernel, RBFKernel):
+            self.weights = Normal(0, 1).sample(torch.Size(
+                [num_features, self.dim])).to(self.train_X) / ls
+
+        # Adjust weights if Matern
+        elif isinstance(model.covar_module.base_kernel, MaternKernel):
+            self.weights = Normal(0, 1).sample(torch.Size(
+                [num_features, self.dim])).to(self.train_X) / ls
+            gamma_weights = Gamma(2.5, 2.5).sample(torch.Size(
+                [self.num_features, 1])).to(self.train_X)
+            self.weights = self.weights * torch.rsqrt(gamma_weights)
+
+        else:
+            raise NotImplementedError(
+                'CanonicalSampler does not support other kernels than RBF and Matérn.')
+
+        # Precompute all the necessary quantities for being able to draw samples
+        self.b = math.pi * 2 * torch.rand(self.num_features, 1)
+        self.Z = self.scaling * \
+            torch.cos(torch.matmul(self.weights, self.train_X.T) + self.b)
+        Sigma = torch.matmul(self.Z.T, self.Z) + gp_noise * \
+            torch.eye(self.train_X.shape[0])
+        self.mu = torch.matmul(torch.matmul(
+            self.Z, torch.inverse(Sigma)), self.train_Y).unsqueeze(-1)
+        D, self.U = torch.linalg.eig(Sigma)
+        # TODO may want a warning here, casting from "imaginary"
+        self.D = D.unsqueeze(-1).to(self.train_X)
+        self.U = self.U.to(self.train_X)
+        self.R = torch.pow(torch.sqrt(self.D) *
+                           (torch.sqrt(self.D) + gp_noise), -1)
