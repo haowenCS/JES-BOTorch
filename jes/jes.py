@@ -54,7 +54,7 @@ class JointEntropySearch(AcquisitionFunction):
             batch_model = SingleTaskGP(batch_train_X, batch_train_Y)
 
         elif isinstance(model, FixedNoiseGP):
-            batch_yvar = fix_gp.likelihood.noise.repeat(num_opt_samples, 1, 1)
+            batch_yvar = model.likelihood.noise.repeat(num_opt_samples, 1).unsqueeze(-1)
             batch_model = FixedNoiseGP(
                 batch_train_X, batch_train_Y, batch_yvar)
         else:
@@ -76,6 +76,7 @@ class JointEntropySearch(AcquisitionFunction):
         Returns:
             Tensor: The JES acquisition function values at the points X.
         """
+        # TODO - check if the batch dimension is squeezed even though it probably should not be
         # everything needs squeezing because we always add extra dimensions inside due to the batching 
         base_entropy = self.compute_base_entropy(X.squeeze(1))
         conditional_entropy = self.compute_conditional_entropy(X.squeeze(1))
